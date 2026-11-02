@@ -1,5 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { PrebuiltVoiceName } from '../types/studio';
+import { useStudioStore } from '../store/useStudioStore';
+import { API_BASE_URL } from '../utils/api';
 import { buildVeoPrompt, estimateDurationSeconds } from '../utils/studioLogic';
 import {
   Upload,
@@ -17,7 +19,6 @@ import {
   SlidersHorizontal,
   Monitor,
   Smartphone,
-  Check,
   Film,
 } from 'lucide-react';
 
@@ -32,43 +33,16 @@ interface SamplePreset {
   backdropGradient: string;
 }
 
-const SAMPLE_PRESETS: SamplePreset[] = [
-  {
-    id: 'preset-elena',
-    name: 'Elena Vance',
-    role: 'Executive Keynote',
-    frameUrl: '/src/assets/images/avatar_elena_vance_1792896875897.jpg',
-    lookDescription:
-      'Confident woman in her early 30s with shoulder-length dark chestnut hair, wearing a tailored charcoal blazer over a white crew-neck top in a dark slate studio',
-    voiceStyle:
-      'Warm, poised executive broadcast delivery at a natural conversational pace',
-    recommendedVoice: 'Kore',
-    backdropGradient: 'from-slate-900 via-indigo-950/60 to-slate-950',
-  },
-  {
-    id: 'preset-marcus',
-    name: 'Marcus Chen',
-    role: 'Product Walkthrough',
-    frameUrl: '/src/assets/images/avatar_marcus_chen_1792896876225.jpg',
-    lookDescription:
-      'East Asian man in his late 30s with short black hair and rectangular glasses, wearing a navy merino sweater over a collared shirt',
-    voiceStyle:
-      'Energetic, approachable founder delivery with clear articulation',
-    recommendedVoice: 'Puck',
-    backdropGradient: 'from-slate-900 via-sky-950/50 to-slate-950',
-  },
-  {
-    id: 'preset-sofia',
-    name: 'Sofia Rossi',
-    role: 'Brand & Onboarding',
-    frameUrl: '/src/assets/images/avatar_sofia_rossi_1792896877384.jpg',
-    lookDescription:
-      'Woman in her late 20s with wavy auburn hair and emerald green silk blouse in soft studio lighting',
-    voiceStyle: 'Calm, articulate, welcoming narrator cadence',
-    recommendedVoice: 'Zephyr',
-    backdropGradient: 'from-slate-900 via-emerald-950/50 to-slate-950',
-  },
-];
+const EMPTY_AVATAR: SamplePreset = {
+  id: 'custom',
+  name: 'Your avatar',
+  role: 'Upload your first avatar',
+  frameUrl: '',
+  lookDescription: '',
+  voiceStyle: 'Clear, natural presenter delivery',
+  recommendedVoice: 'Kore',
+  backdropGradient: 'from-slate-900 via-indigo-950/60 to-slate-950',
+};
 
 const VOICE_CHOICES: {
   name: PrebuiltVoiceName;
@@ -99,20 +73,11 @@ export const SimpleAvatarStudio: React.FC = () => {
   >('create');
 
   // Avatar & Uploaded Sample Video state
-  const [selectedPresetId, setSelectedPresetId] = useState<string>(
-    SAMPLE_PRESETS[0].id
-  );
   const [uploadedVideoUrl, setUploadedVideoUrl] = useState<string | null>(null);
   const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
-  const [referenceFrameUrl, setReferenceFrameUrl] = useState<string>(
-    SAMPLE_PRESETS[0].frameUrl
-  );
-  const [lookDescription, setLookDescription] = useState<string>(
-    SAMPLE_PRESETS[0].lookDescription
-  );
-  const [voiceStyle, setVoiceStyle] = useState<string>(
-    SAMPLE_PRESETS[0].voiceStyle
-  );
+  const [referenceFrameUrl, setReferenceFrameUrl] = useState<string>('');
+  const [lookDescription, setLookDescription] = useState<string>('');
+  const [voiceStyle, setVoiceStyle] = useState<string>(EMPTY_AVATAR.voiceStyle);
   const [analyzingSample, setAnalyzingSample] = useState<boolean>(false);
   const [showAdvancedTuning, setShowAdvancedTuning] = useState<boolean>(false);
 
@@ -122,6 +87,21 @@ export const SimpleAvatarStudio: React.FC = () => {
     'Welcome to our product keynote. Today I will show you how our team turns any script and sample video into a lifelike presenter broadcast.'
   );
   const [voiceName, setVoiceName] = useState<PrebuiltVoiceName>('Kore');
+  const addAvatar = useStudioStore((state) => state.addAvatar);
+  const updateAvatar = useStudioStore((state) => state.updateAvatar);
+  const addVoiceProfile = useStudioStore((state) => state.addVoiceProfile);
+  const avatarProfiles = useStudioStore((state) => state.avatars);
+  const setDefaultAvatarId = useStudioStore((state) => state.setDefaultAvatarId);
+  const [selectedAvatarId, setSelectedAvatarId] = useState<string | null>(null);
+  const [selectedCustomVoiceProfileId, setSelectedCustomVoiceProfileId] =
+    useState<string | null>(null);
+  const voiceProfiles = useStudioStore((state) => state.voices);
+  const customVoiceProfiles = voiceProfiles.filter(
+    (profile) => profile.elevenLabsVoiceId && !profile.requiresVerification
+  );
+  const selectedCustomVoice = customVoiceProfiles.find(
+    (profile) => profile.id === selectedCustomVoiceProfileId
+  );
   const [aspectRatio, setAspectRatio] = useState<'16:9' | '9:16'>('16:9');
   const [duration, setDuration] = useState<'5s' | '10s'>('5s');
   const [showCaptions, setShowCaptions] = useState<boolean>(true);
@@ -130,6 +110,11 @@ export const SimpleAvatarStudio: React.FC = () => {
   const [previewingVoice, setPreviewingVoice] = useState<boolean>(false);
   const [playingVoicePreview, setPlayingVoicePreview] =
     useState<boolean>(false);
+  const [voiceCloneName, setVoiceCloneName] = useState('My Voice');
+  const [voiceCloneFile, setVoiceCloneFile] = useState<File | null>(null);
+  const [voiceCloneConsent, setVoiceCloneConsent] = useState(false);
+  const [voiceCloneLoading, setVoiceCloneLoading] = useState(false);
+  const [voiceCloneMessage, setVoiceCloneMessage] = useState<string | null>(null);
 
   // Generation & Output state
   const [genStage, setGenStage] = useState<
@@ -151,6 +136,8 @@ export const SimpleAvatarStudio: React.FC = () => {
   const resultVideoRef = useRef<HTMLVideoElement | null>(null);
   const resultAudioRef = useRef<HTMLAudioElement | null>(null);
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const uploadedAvatarIdRef = useRef<string | null>(null);
+  const voiceCloneFileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     return () => {
@@ -158,17 +145,38 @@ export const SimpleAvatarStudio: React.FC = () => {
     };
   }, []);
 
-  const currentPreset =
-    SAMPLE_PRESETS.find((p) => p.id === selectedPresetId) || SAMPLE_PRESETS[0];
+  const currentPreset = EMPTY_AVATAR;
 
-  const handleSelectPreset = (preset: SamplePreset) => {
-    setSelectedPresetId(preset.id);
+  const saveUploadedAvatar = (
+    imageUrl: string,
+    fileName: string,
+    description: string
+  ) => {
+    const name = fileName.replace(/\.[^/.]+$/, '').trim() || 'My Avatar';
+    const avatar = {
+      name,
+      imageUrl,
+      lookDescription: description || 'User-provided avatar reference',
+      outfitVariant: 'User-uploaded reference',
+    };
+    const avatarId =
+      uploadedAvatarIdRef.current || addAvatar(avatar);
+    if (uploadedAvatarIdRef.current) updateAvatar(avatarId, avatar);
+    uploadedAvatarIdRef.current = avatarId;
+    setSelectedAvatarId(avatarId);
+    setDefaultAvatarId(avatarId);
+  };
+
+  const selectSavedAvatar = (avatarId: string) => {
+    const avatar = avatarProfiles.find((item) => item.id === avatarId);
+    if (!avatar) return;
+    uploadedAvatarIdRef.current = avatar.id;
+    setSelectedAvatarId(avatar.id);
+    setDefaultAvatarId(avatar.id);
+    setUploadedFileName(avatar.name);
+    setReferenceFrameUrl(avatar.imageUrl);
+    setLookDescription(avatar.lookDescription);
     setUploadedVideoUrl(null);
-    setUploadedFileName(null);
-    setReferenceFrameUrl(preset.frameUrl);
-    setLookDescription(preset.lookDescription);
-    setVoiceStyle(preset.voiceStyle);
-    setVoiceName(preset.recommendedVoice);
     setErrorMessage(null);
   };
 
@@ -178,8 +186,12 @@ export const SimpleAvatarStudio: React.FC = () => {
     if (!file) return;
 
     setErrorMessage(null);
+    uploadedAvatarIdRef.current = null;
+    setSelectedAvatarId(null);
+    setReferenceFrameUrl('');
+    setLookDescription('');
+    setVoiceStyle(EMPTY_AVATAR.voiceStyle);
     setUploadedFileName(file.name);
-    setSelectedPresetId('custom');
 
     if (file.type.startsWith('image/')) {
       const reader = new FileReader();
@@ -187,6 +199,7 @@ export const SimpleAvatarStudio: React.FC = () => {
         if (typeof reader.result === 'string') {
           setUploadedVideoUrl(null);
           setReferenceFrameUrl(reader.result);
+          saveUploadedAvatar(reader.result, file.name, lookDescription);
           await analyzeUploadedSample(reader.result, undefined);
         }
       };
@@ -247,6 +260,9 @@ export const SimpleAvatarStudio: React.FC = () => {
 
     if (capturedFrame) {
       setReferenceFrameUrl(capturedFrame);
+      saveUploadedAvatar(capturedFrame, file.name, lookDescription);
+    } else {
+      setErrorMessage('Could not read a frame from that video. Try uploading a photo.');
     }
 
     await analyzeUploadedSample(
@@ -261,14 +277,21 @@ export const SimpleAvatarStudio: React.FC = () => {
   ) => {
     setAnalyzingSample(true);
     try {
-      const response = await fetch('/api/sample/analyze', {
+      const response = await fetch(`${API_BASE_URL}/sample/analyze`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ frameDataUrl, videoDataUrl }),
       });
       const data = await response.json();
       if (response.ok) {
-        if (data.lookDescription) setLookDescription(data.lookDescription);
+        if (data.lookDescription) {
+          setLookDescription(data.lookDescription);
+          if (uploadedAvatarIdRef.current) {
+            updateAvatar(uploadedAvatarIdRef.current, {
+              lookDescription: data.lookDescription,
+            });
+          }
+        }
         if (data.voiceStyle) setVoiceStyle(data.voiceStyle);
         if (data.recommendedVoice) setVoiceName(data.recommendedVoice);
       }
@@ -284,7 +307,7 @@ export const SimpleAvatarStudio: React.FC = () => {
     setWritingScript(true);
     setErrorMessage(null);
     try {
-      const response = await fetch('/api/script/assist', {
+      const response = await fetch(`${API_BASE_URL}/script/assist`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -323,12 +346,13 @@ export const SimpleAvatarStudio: React.FC = () => {
     setPreviewingVoice(true);
     setErrorMessage(null);
     try {
-      const response = await fetch('/api/tts/generate', {
+      const response = await fetch(`${API_BASE_URL}/tts/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           text: spokenScript.trim(),
           voiceName,
+          elevenLabsVoiceId: selectedCustomVoice?.elevenLabsVoiceId,
           stylePrompt: voiceStyle,
         }),
       });
@@ -352,7 +376,77 @@ export const SimpleAvatarStudio: React.FC = () => {
     }
   };
 
+  const handleCreateVoiceClone = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!voiceCloneFile || !voiceCloneConsent || !voiceCloneName.trim()) return;
+
+    setVoiceCloneLoading(true);
+    setVoiceCloneMessage(null);
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () =>
+          typeof reader.result === 'string'
+            ? resolve(reader.result)
+            : reject(new Error('Could not read the selected audio file.'));
+        reader.onerror = () =>
+          reject(new Error('Could not read the selected audio file.'));
+        reader.readAsDataURL(voiceCloneFile);
+      });
+      const commaIndex = dataUrl.indexOf(',');
+      if (commaIndex < 0) throw new Error('The selected audio file is invalid.');
+
+      const response = await fetch(`${API_BASE_URL}/voice/clone`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: voiceCloneName.trim(),
+          mimeType: voiceCloneFile.type,
+          audioBase64: dataUrl.slice(commaIndex + 1),
+          consent: voiceCloneConsent,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data.voiceId) {
+        throw new Error(data.error || 'Could not clone this voice sample.');
+      }
+
+      const profileId = addVoiceProfile({
+        name: voiceCloneName.trim(),
+        elevenLabsVoiceId: data.voiceId,
+        requiresVerification: Boolean(data.requiresVerification),
+        pace: 1,
+        tone: 'warm',
+        accentNotes: 'Voice cloned from an authorized recording',
+      });
+      setVoiceCloneName('My Voice');
+      setVoiceCloneFile(null);
+      setVoiceCloneConsent(false);
+      if (voiceCloneFileInputRef.current) {
+        voiceCloneFileInputRef.current.value = '';
+      }
+      if (data.requiresVerification) {
+        setVoiceCloneMessage(
+          'Voice created, but ElevenLabs requires verification before use. Complete verification in your ElevenLabs account.'
+        );
+      } else {
+        setSelectedCustomVoiceProfileId(profileId);
+        setVoiceCloneMessage('Voice added. It is now selected in the voice menu.');
+      }
+    } catch (err) {
+      setVoiceCloneMessage(
+        err instanceof Error ? err.message : 'Could not clone this voice sample.'
+      );
+    } finally {
+      setVoiceCloneLoading(false);
+    }
+  };
+
   const handleGenerateAvatarVideo = async () => {
+    if (!referenceFrameUrl) {
+      setErrorMessage('Upload a photo or sample video to create your first avatar.');
+      return;
+    }
     if (!spokenScript.trim()) {
       setErrorMessage('Please enter the script for your avatar to speak.');
       return;
@@ -369,12 +463,13 @@ export const SimpleAvatarStudio: React.FC = () => {
 
     try {
       let ttsUrl = generatedAudioUrl;
-      const ttsRes = await fetch('/api/tts/generate', {
+      const ttsRes = await fetch(`${API_BASE_URL}/tts/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           text: spokenScript.trim(),
           voiceName,
+          elevenLabsVoiceId: selectedCustomVoice?.elevenLabsVoiceId,
           stylePrompt: voiceStyle,
         }),
       });
@@ -398,7 +493,7 @@ export const SimpleAvatarStudio: React.FC = () => {
         scriptText: spokenScript.trim(),
       });
 
-      const veoStartRes = await fetch('/api/veo/start', {
+      const veoStartRes = await fetch(`${API_BASE_URL}/veo/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -426,7 +521,7 @@ export const SimpleAvatarStudio: React.FC = () => {
 
         try {
           const pollRes = await fetch(
-            `/api/veo/status/${encodeURIComponent(interactionId)}`
+            `${API_BASE_URL}/veo/status/${encodeURIComponent(interactionId)}`
           );
           const pollData = await pollRes.json();
 
@@ -504,6 +599,7 @@ export const SimpleAvatarStudio: React.FC = () => {
   const estimatedSecs = estimateDurationSeconds(spokenScript, 1.0, false);
   const activeVoiceInfo =
     VOICE_CHOICES.find((v) => v.name === voiceName) || VOICE_CHOICES[0];
+  const activeVoiceLabel = selectedCustomVoice?.name || activeVoiceInfo.label;
 
   return (
     <div className="min-h-screen lg:h-screen lg:overflow-hidden bg-[#090D16] text-[#F1F5F9] flex flex-col">
@@ -556,7 +652,7 @@ export const SimpleAvatarStudio: React.FC = () => {
         <div className="flex items-center shrink-0">
           <button
             type="button"
-            disabled={genStage === 'tts' || genStage === 'veo'}
+            disabled={!referenceFrameUrl || genStage === 'tts' || genStage === 'veo'}
             onClick={handleGenerateAvatarVideo}
             className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer shadow-sm"
           >
@@ -583,7 +679,7 @@ export const SimpleAvatarStudio: React.FC = () => {
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-semibold text-white font-display">
-                Choose Avatar or Upload Sample Video
+                Create Your First Avatar
               </h2>
               {analyzingSample ? (
                 <span className="inline-flex items-center gap-1.5 text-xs text-indigo-400 font-mono">
@@ -592,30 +688,26 @@ export const SimpleAvatarStudio: React.FC = () => {
                 </span>
               ) : (
                 <span className="text-xs text-slate-400">
-                  {uploadedFileName ? 'Custom Sample Active' : currentPreset.role}
+                  {uploadedFileName ? 'Your avatar is ready' : currentPreset.role}
                 </span>
               )}
             </div>
 
-            {/* 4-Card Strip: Upload Sample + 3 Studio Avatars */}
-            <div className="grid grid-cols-4 gap-2.5">
-              {/* Upload Sample Card */}
+            <div className="grid grid-cols-1 gap-2.5">
               <label
                 htmlFor="sample-video-upload"
-                className={`group flex flex-col items-center justify-center p-2.5 rounded-xl border border-dashed transition-all text-center cursor-pointer aspect-[4/5] ${
-                  selectedPresetId === 'custom'
-                    ? 'bg-indigo-950/30 border-indigo-500 text-white'
-                    : 'bg-[#090D16] border-slate-700/80 hover:border-indigo-400 text-slate-300'
-                }`}
+                className="group flex items-center gap-3 p-4 rounded-xl border border-dashed border-indigo-500/70 bg-indigo-950/20 hover:bg-indigo-950/40 transition-all text-left cursor-pointer"
               >
-                <div className="w-8 h-8 rounded-full bg-indigo-500/15 border border-indigo-500/30 flex items-center justify-center text-indigo-400 mb-1.5 group-hover:scale-105 transition-transform">
+                <div className="w-10 h-10 shrink-0 rounded-full bg-indigo-500/15 border border-indigo-500/30 flex items-center justify-center text-indigo-400 group-hover:scale-105 transition-transform">
                   <Upload className="w-4 h-4" />
                 </div>
-                <span className="text-[11px] font-semibold text-white leading-tight">
-                  {uploadedFileName ? 'Replace Sample' : 'Upload Sample'}
-                </span>
-                <span className="text-[10px] text-slate-400 mt-0.5">
-                  Video / Photo
+                <span className="min-w-0">
+                  <span className="block text-sm font-semibold text-white">
+                    Upload Your Photo or Video
+                  </span>
+                  <span className="block text-xs text-slate-400 mt-0.5">
+                    Your upload becomes your first saved avatar.
+                  </span>
                 </span>
                 <input
                   id="sample-video-upload"
@@ -625,44 +717,35 @@ export const SimpleAvatarStudio: React.FC = () => {
                   className="sr-only"
                 />
               </label>
-
-              {/* 3 Pre-loaded Studio Presenters */}
-              {SAMPLE_PRESETS.map((preset) => {
-                const isSelected = selectedPresetId === preset.id;
-                return (
-                  <button
-                    key={preset.id}
-                    type="button"
-                    onClick={() => handleSelectPreset(preset)}
-                    className={`group relative rounded-xl overflow-hidden border transition-all aspect-[4/5] text-left cursor-pointer ${
-                      isSelected
-                        ? 'border-indigo-500 ring-2 ring-indigo-500/30'
-                        : 'border-slate-800 hover:border-slate-600'
-                    }`}
-                  >
-                    <img
-                      src={preset.frameUrl}
-                      alt={preset.name}
-                      referrerPolicy="no-referrer"
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                    />
-                    <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/45 to-transparent p-2">
-                      <p className="text-[11px] font-semibold text-white truncate">
-                        {preset.name}
-                      </p>
-                      <p className="text-[10px] text-slate-300 truncate">
-                        {preset.recommendedVoice}
-                      </p>
-                    </div>
-                    {isSelected && (
-                      <div className="absolute top-1.5 right-1.5 w-4 h-4 rounded-full bg-indigo-600 text-white flex items-center justify-center">
-                        <Check className="w-2.5 h-2.5" />
-                      </div>
-                    )}
-                  </button>
-                );
-              })}
             </div>
+            {avatarProfiles.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-xs font-medium text-slate-300">
+                  Your saved avatars
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {avatarProfiles.map((avatar) => (
+                    <button
+                      key={avatar.id}
+                      type="button"
+                      onClick={() => selectSavedAvatar(avatar.id)}
+                      className={`flex items-center gap-2 px-2 py-1.5 rounded-lg border text-xs transition-colors ${
+                        selectedAvatarId === avatar.id
+                          ? 'border-indigo-500 bg-indigo-950/40 text-white'
+                          : 'border-slate-700 bg-[#090D16] text-slate-300 hover:border-slate-500'
+                      }`}
+                    >
+                      <img
+                        src={avatar.imageUrl}
+                        alt=""
+                        className="w-7 h-7 rounded object-cover"
+                      />
+                      <span className="max-w-32 truncate">{avatar.name}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Section 2: HeyGen-Style Scene Script Card */}
@@ -670,22 +753,42 @@ export const SimpleAvatarStudio: React.FC = () => {
             {/* Script Card Header: Active Avatar Mini-Lockup + Voice Selector + Test Voice */}
             <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 border-b border-slate-800/80 bg-[#111827]/60">
               <div className="flex items-center gap-2.5 min-w-0">
-                <img
-                  src={referenceFrameUrl}
-                  alt="Active Avatar"
-                  referrerPolicy="no-referrer"
-                  className="w-7 h-7 rounded-full object-cover border border-slate-700 shrink-0"
-                />
+                {referenceFrameUrl ? (
+                  <img
+                    src={referenceFrameUrl}
+                    alt="Active Avatar"
+                    referrerPolicy="no-referrer"
+                    className="w-7 h-7 rounded-full object-cover border border-slate-700 shrink-0"
+                  />
+                ) : (
+                  <div
+                    aria-label="No avatar selected"
+                    className="w-7 h-7 rounded-full border border-dashed border-slate-700 shrink-0 flex items-center justify-center"
+                  >
+                    <Upload className="w-3.5 h-3.5 text-indigo-300" />
+                  </div>
+                )}
                 <span className="text-xs font-semibold text-white truncate">
                   {uploadedFileName || currentPreset.name}
                 </span>
                 <span className="text-slate-600">·</span>
                 <select
-                  aria-label="Gemini TTS Voice"
-                  value={voiceName}
-                  onChange={(e) =>
-                    setVoiceName(e.target.value as PrebuiltVoiceName)
+                  aria-label="Voice"
+                  value={
+                    selectedCustomVoice
+                      ? `elevenlabs:${selectedCustomVoice.id}`
+                      : voiceName
                   }
+                  onChange={(e) => {
+                    if (e.target.value.startsWith('elevenlabs:')) {
+                      setSelectedCustomVoiceProfileId(
+                        e.target.value.slice('elevenlabs:'.length)
+                      );
+                    } else {
+                      setSelectedCustomVoiceProfileId(null);
+                      setVoiceName(e.target.value as PrebuiltVoiceName);
+                    }
+                  }}
                   className="text-xs font-medium text-indigo-300 bg-transparent hover:text-indigo-200 focus:outline-none cursor-pointer"
                 >
                   {VOICE_CHOICES.map((v) => (
@@ -695,6 +798,15 @@ export const SimpleAvatarStudio: React.FC = () => {
                       className="bg-[#0E1320] text-white"
                     >
                       Voice: {v.label} ({v.tagline})
+                    </option>
+                  ))}
+                  {customVoiceProfiles.map((profile) => (
+                    <option
+                      key={profile.id}
+                      value={`elevenlabs:${profile.id}`}
+                      className="bg-[#0E1320] text-white"
+                    >
+                      Voice: {profile.name} (your cloned voice)
                     </option>
                   ))}
                 </select>
@@ -773,7 +885,7 @@ export const SimpleAvatarStudio: React.FC = () => {
                 <span>
                   {showAdvancedTuning
                     ? 'Hide Sample Match Details'
-                    : 'Sample Look & Voice Match'}
+                    : 'Avatar Look & Voice Settings'}
                 </span>
               </button>
             </div>
@@ -801,7 +913,15 @@ export const SimpleAvatarStudio: React.FC = () => {
                   id="sample-look-input"
                   type="text"
                   value={lookDescription}
-                  onChange={(e) => setLookDescription(e.target.value)}
+                  onChange={(e) => {
+                    const description = e.target.value;
+                    setLookDescription(description);
+                    if (uploadedAvatarIdRef.current) {
+                      updateAvatar(uploadedAvatarIdRef.current, {
+                        lookDescription: description,
+                      });
+                    }
+                  }}
                   className="w-full px-3 py-1.5 text-xs bg-[#111827] border border-slate-800 rounded-lg text-slate-200 focus:outline-none focus:border-indigo-500"
                 />
               </div>
@@ -810,7 +930,7 @@ export const SimpleAvatarStudio: React.FC = () => {
                   htmlFor="sample-voice-style-input"
                   className="block text-[11px] text-slate-400 mb-1"
                 >
-                  Matched Voice Style Instruction (Sent to Gemini TTS)
+                  Voice Style Instruction (Google preset voices)
                 </label>
                 <input
                   id="sample-voice-style-input"
@@ -823,11 +943,94 @@ export const SimpleAvatarStudio: React.FC = () => {
             </div>
           )}
 
+          {activeSection === 'voices' && (
+            <form
+              onSubmit={handleCreateVoiceClone}
+              className="p-4 rounded-xl bg-[#090D16] border border-slate-800/90 space-y-3"
+            >
+              <div>
+                <h3 className="text-sm font-semibold text-white">
+                  Create a voice from your recording
+                </h3>
+                <p className="text-xs text-slate-400 mt-1">
+                  Upload 1–3 minutes of clean audio (MP3, WAV, M4A, AAC, OGG,
+                  WebM, or FLAC; maximum 20 MB). Requires ELEVENLABS_API_KEY
+                  in the server .env file.
+                </p>
+              </div>
+              <label className="block text-xs text-slate-300">
+                Voice name
+                <input
+                  type="text"
+                  required
+                  maxLength={80}
+                  value={voiceCloneName}
+                  onChange={(event) => setVoiceCloneName(event.target.value)}
+                  className="mt-1 w-full px-3 py-2 text-sm bg-[#111827] border border-slate-800 rounded-lg text-white focus:outline-none focus:border-indigo-500"
+                />
+              </label>
+              <label className="block text-xs text-slate-300">
+                Audio recording
+                <input
+                  ref={voiceCloneFileInputRef}
+                  type="file"
+                  required
+                  accept="audio/*"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0] || null;
+                    if (file && file.size > 20 * 1024 * 1024) {
+                      setVoiceCloneMessage(
+                        'Audio sample must be no larger than 20 MB.'
+                      );
+                      event.target.value = '';
+                      setVoiceCloneFile(null);
+                      return;
+                    }
+                    setVoiceCloneFile(file);
+                    setVoiceCloneMessage(null);
+                  }}
+                  className="mt-1 block w-full text-xs text-slate-300 file:mr-2 file:px-2 file:py-1.5 file:rounded-md file:border file:border-slate-700 file:bg-slate-900 file:text-slate-200"
+                />
+              </label>
+              <label className="flex items-start gap-2 text-xs text-slate-300">
+                <input
+                  type="checkbox"
+                  checked={voiceCloneConsent}
+                  onChange={(event) =>
+                    setVoiceCloneConsent(event.target.checked)
+                  }
+                  className="mt-0.5 accent-indigo-500"
+                />
+                <span>
+                  I confirm this is my voice or I have explicit permission to
+                  create and use this voice clone.
+                </span>
+              </label>
+              <button
+                type="submit"
+                disabled={
+                  voiceCloneLoading || !voiceCloneFile || !voiceCloneConsent
+                }
+                className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 rounded-lg cursor-pointer disabled:cursor-not-allowed"
+              >
+                {voiceCloneLoading && (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                )}
+                {voiceCloneLoading ? 'Creating voice...' : 'Create voice clone'}
+              </button>
+              {voiceCloneMessage && (
+                <p role="status" className="text-xs text-slate-300">
+                  {voiceCloneMessage}
+                </p>
+              )}
+            </form>
+          )}
+
           {/* Primary Action Button */}
           <div className="space-y-2 pt-1">
             <button
               type="button"
-              disabled={genStage === 'tts' || genStage === 'veo'}
+              disabled={!referenceFrameUrl || genStage === 'tts' || genStage === 'veo'}
               onClick={handleGenerateAvatarVideo}
               className="w-full py-3.5 px-5 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 rounded-xl shadow-lg transition-colors flex items-center justify-center gap-2 cursor-pointer"
             >
@@ -855,7 +1058,7 @@ export const SimpleAvatarStudio: React.FC = () => {
             <p className="text-[11px] text-slate-400 flex items-center justify-center gap-1.5">
               <Clock className="w-3 h-3 text-slate-500" />
               <span>
-                Combines Gemini TTS voiceover + Veo lip-sync video (~45–90s)
+                Combines the selected voice + Veo lip-sync video (~45–90s)
               </span>
             </p>
           </div>
@@ -967,7 +1170,7 @@ export const SimpleAvatarStudio: React.FC = () => {
               }`}
             >
               {/* Soft Ambient Studio Backdrop Blur so 1:1 portraits fill 16:9 harmoniously */}
-              {!generatedVideoUrl && !uploadedVideoUrl && (
+              {!generatedVideoUrl && !uploadedVideoUrl && referenceFrameUrl && (
                 <img
                   src={referenceFrameUrl}
                   alt=""
@@ -1005,20 +1208,30 @@ export const SimpleAvatarStudio: React.FC = () => {
                   playsInline
                   className="relative z-10 w-full h-full object-contain"
                 />
-              ) : (
+              ) : referenceFrameUrl ? (
                 <img
                   src={referenceFrameUrl}
                   alt={uploadedFileName || currentPreset.name}
                   referrerPolicy="no-referrer"
                   className="relative z-10 h-full object-contain drop-shadow-2xl"
                 />
+              ) : (
+                <div className="relative z-10 px-8 text-center">
+                  <Upload className="w-10 h-10 text-indigo-300 mx-auto mb-3" />
+                  <p className="text-sm font-semibold text-white">
+                    Upload a photo or video to create your first avatar
+                  </p>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Your avatar will be saved to your library automatically.
+                  </p>
+                </div>
               )}
 
               {/* Subtle Top Stage Status Overlay */}
               <div className="absolute top-3.5 left-4 right-4 z-20 flex items-center justify-between text-xs text-slate-200/90 drop-shadow pointer-events-none">
                 <span>
                   {uploadedFileName || currentPreset.name} ·{' '}
-                  {activeVoiceInfo.label} Voice
+                  {activeVoiceLabel} Voice
                 </span>
                 <span className="font-mono text-[11px]">
                   {generatedVideoUrl
@@ -1036,7 +1249,7 @@ export const SimpleAvatarStudio: React.FC = () => {
                   <div className="space-y-1 max-w-sm">
                     <p className="text-sm font-semibold text-white font-display">
                       {genStage === 'tts'
-                        ? 'Step 1/2: Synthesizing Gemini TTS Voiceover...'
+                        ? 'Step 1/2: Synthesizing selected voiceover...'
                         : `Step 2/2: Rendering Lip-Sync Video with Veo (${genProgress}%)...`}
                     </p>
                     <p className="text-xs text-slate-300">
@@ -1095,7 +1308,7 @@ export const SimpleAvatarStudio: React.FC = () => {
               <div className="flex items-center gap-2 text-xs text-slate-400">
                 <Film className="w-4 h-4 text-indigo-400 shrink-0" />
                 <span>
-                  Select an avatar or upload a sample video on the left, enter
+                  Upload a photo or video on the left, enter
                   your script, and click{' '}
                   <strong className="text-slate-200">Generate Video</strong>.
                 </span>

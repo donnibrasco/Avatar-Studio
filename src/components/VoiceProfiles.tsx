@@ -2,6 +2,7 @@ import React, { useRef, useState } from 'react';
 import { useStudioStore } from '../store/useStudioStore';
 import { PrebuiltVoiceName, VoiceProfile, VoiceTone } from '../types/studio';
 import { buildTtsStylePrompt } from '../utils/studioLogic';
+import { API_BASE_URL } from '../utils/api';
 import {
   Volume2,
   Play,
@@ -83,6 +84,10 @@ export const VoiceProfiles: React.FC = () => {
   const [previewText, setPreviewText] = useState(
     PREBUILT_VOICES[0].sampleLine
   );
+  const [cloneName, setCloneName] = useState('My Voice');
+  const [cloneAudio, setCloneAudio] = useState<File | null>(null);
+  const [cloneConsent, setCloneConsent] = useState(false);
+  const [cloningVoice, setCloningVoice] = useState(false);
 
   // Playback state
   const [loadingVoiceKey, setLoadingVoiceKey] = useState<string | null>(null);
@@ -105,6 +110,7 @@ export const VoiceProfiles: React.FC = () => {
   const playTtsPreview = async (params: {
     key: string;
     voiceName: PrebuiltVoiceName;
+    elevenLabsVoiceId?: string;
     paceVal: number;
     toneVal: VoiceTone;
     accentVal: string;
@@ -139,12 +145,14 @@ export const VoiceProfiles: React.FC = () => {
         accentNotes: params.accentVal,
       });
 
-      const response = await fetch('/api/tts/generate', {
+      const response = await fetch(`${API_BASE_URL}/tts/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           text: params.textToSpeak,
           voiceName: params.voiceName,
+          elevenLabsVoiceId: params.elevenLabsVoiceId,
+          pace: params.paceVal,
           stylePrompt,
         }),
       });
@@ -191,6 +199,101 @@ export const VoiceProfiles: React.FC = () => {
     setProfileName('New Studio Voice Style');
   };
 
+  const handleCloneVoice = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!cloneAudio || !cloneConsent || !cloneName.trim()) return;
+
+    setCloningVoice(true);
+    setTtsError(null);
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () =>
+          typeof reader.result === 'string'
+            ? resolve(reader.result)
+            : reject(new Error('Could not read the selected audio file.'));
+        reader.onerror = () =>
+          reject(new Error('Could not read the selected audio file.'));
+        reader.readAsDataURL(cloneAudio);
+      });
+      const commaIndex = dataUrl.indexOf(',');
+      if (commaIndex < 0) throw new Error('The selected audio file is invalid.');
+
+      const response = await fetch(`${API_BASE_URL}/voice/clone`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: cloneName.trim(),
+          mimeType: cloneAudio.type,
+          audioBase64: dataUrl.slice(commaIndex + 1),
+          consent: cloneConsent,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data.voiceId) {
+        throw new Error(data.error || 'Could not clone this voice sample.');
+      }
+
+      addVoiceProfile({
+        name: cloneName.trim(),
+        elevenLabsVoiceId: data.voiceId,
+        requiresVerification: Boolean(data.requiresVerification),
+        pace: 1,
+        tone: 'warm',
+        accentNotes: 'Voice cloned from an authorized recording',
+      });
+      setCloneName('My Voice');
+      setCloneAudio(null);
+      setCloneConsent(false);
+      const fileInput = document.getElementById(
+        'voice-clone-audio'
+      ) as HTMLInputElement | null;
+      if (fileInput) fileInput.value = '';
+      if (data.requiresVerification) {
+        setTtsError(
+          'Voice created, but ElevenLabs requires verification before it can be used. Complete verification in your ElevenLabs account.'
+        );
+      }
+    } catch (err) {
+      setTtsError(
+        err instanceof Error ? err.message : 'Could not clone this voice sample.'
+      );
+    } finally {
+      setCloningVoice(false);
+    }
+  };
+
+  const handleDeleteProfile = async (profile: VoiceProfile) => {
+    if (
+      profile.elevenLabsVoiceId &&
+      !window.confirm(
+        `Delete "${profile.name}" from this app and your ElevenLabs account?`
+      )
+    ) {
+      return;
+    }
+
+    if (profile.elevenLabsVoiceId) {
+      setTtsError(null);
+      try {
+        const response = await fetch(
+          `${API_BASE_URL}/voice/${encodeURIComponent(profile.elevenLabsVoiceId)}`,
+          { method: 'DELETE' }
+        );
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.error || 'Could not delete the cloned voice.');
+        }
+      } catch (err) {
+        setTtsError(
+          err instanceof Error ? err.message : 'Could not delete the cloned voice.'
+        );
+        return;
+      }
+    }
+    deleteVoiceProfile(profile.id);
+  };
+
   const applyVoiceToCurrentScene = (voiceId: string) => {
     setDefaultVoiceId(voiceId);
     if (selectedSceneId) {
@@ -208,18 +311,16 @@ export const VoiceProfiles: React.FC = () => {
             Voice Profiles
           </h1>
           <p className="text-sm text-slate-400 mt-1 max-w-2xl">
-            Configure reusable voiceover profiles powered by Gemini TTS prebuilt
-            voices with customizable pace, emotional tone, and accent/diction
-            notes.
+          Configure Google preset voices or enroll an authorized voice sample
+          for custom speech generation with ElevenLabs.
           </p>
         </div>
 
         <div className="flex items-start gap-2.5 px-4 py-3 rounded-lg bg-[#111827] border border-slate-800 max-w-md text-xs text-slate-300">
           <Info className="w-4 h-4 text-indigo-400 shrink-0 mt-0.5" />
           <p className="leading-relaxed">
-            <strong className="text-white">Voice Style Disclosure:</strong>{' '}
-            These profiles direct Gemini TTS prebuilt voices using pace, tone,
-            and diction prompts rather than cloning personal voice recordings.
+          <strong className="text-white">Voice consent:</strong> Only clone
+          your own voice or a voice you have explicit permission to use.
           </p>
         </div>
       </div>
@@ -249,7 +350,7 @@ export const VoiceProfiles: React.FC = () => {
               Saved Voice Profiles ({voices.length})
             </h2>
             <span className="text-xs text-slate-400">
-              Click Preview to hear real Gemini TTS synthesis
+                Preview uses the provider shown on each profile
             </span>
           </div>
 
@@ -276,7 +377,10 @@ export const VoiceProfiles: React.FC = () => {
                           {profile.name}
                         </h3>
                         <span className="text-xs text-slate-400">
-                          · {profile.prebuiltVoice}
+                          · {profile.elevenLabsVoiceId
+                            ? 'ElevenLabs voice clone'
+                            : profile.prebuiltVoice}
+                          {profile.requiresVerification && ' · verification required'}
                         </span>
                       </div>
                       <p className="text-xs text-slate-400 mt-1">
@@ -292,11 +396,12 @@ export const VoiceProfiles: React.FC = () => {
                     <div className="flex items-center gap-2 shrink-0">
                       <button
                         type="button"
-                        disabled={isLoading}
+                        disabled={isLoading || profile.requiresVerification}
                         onClick={() =>
                           playTtsPreview({
                             key: playKey,
-                            voiceName: profile.prebuiltVoice,
+                            voiceName: profile.prebuiltVoice || 'Kore',
+                            elevenLabsVoiceId: profile.elevenLabsVoiceId,
                             paceVal: profile.pace,
                             toneVal: profile.tone,
                             accentVal: profile.accentNotes,
@@ -330,6 +435,7 @@ export const VoiceProfiles: React.FC = () => {
 
                       <button
                         type="button"
+                        disabled={profile.requiresVerification}
                         onClick={() => applyVoiceToCurrentScene(profile.id)}
                         className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-indigo-300 hover:text-white bg-indigo-950/50 hover:bg-indigo-600 border border-indigo-800/60 rounded-lg transition-colors whitespace-nowrap cursor-pointer"
                       >
@@ -340,7 +446,7 @@ export const VoiceProfiles: React.FC = () => {
                       <button
                         type="button"
                         disabled={voices.length <= 1}
-                        onClick={() => deleteVoiceProfile(profile.id)}
+                        onClick={() => void handleDeleteProfile(profile)}
                         aria-label={`Delete voice profile ${profile.name}`}
                         className="p-2 text-slate-400 hover:text-rose-400 hover:bg-slate-800 disabled:opacity-40 disabled:pointer-events-none rounded-lg transition-colors cursor-pointer"
                       >
@@ -353,39 +459,85 @@ export const VoiceProfiles: React.FC = () => {
             })}
           </div>
 
-          {/* Placeholder "Upload voice sample" slot — disabled & labeled "Coming soon" */}
-          <div
-            aria-disabled="true"
-            className="p-5 rounded-xl bg-[#0B0F19] border border-dashed border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4 opacity-75"
+          <form
+            onSubmit={handleCloneVoice}
+            className="p-5 rounded-xl bg-[#0B0F19] border border-slate-800 space-y-4"
           >
             <div className="flex items-start gap-3">
-              <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-500">
+              <div className="p-2.5 rounded-lg bg-indigo-950/60 border border-indigo-800/60 text-indigo-300">
                 <MicOff className="w-5 h-5" />
               </div>
               <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="text-sm font-semibold text-slate-300 font-display">
-                    Upload Voice Sample (Instant Voice Cloning)
-                  </h3>
-                  <span className="text-xs font-mono text-amber-400 whitespace-nowrap shrink-0">
-                    · Coming soon
-                  </span>
-                </div>
-                <p className="text-xs text-slate-400 mt-1 max-w-lg">
-                  Custom acoustic voice cloning from uploaded audio samples is
-                  not yet enabled. Use the Gemini TTS Voice Style Builder on the
-                  right to craft expressive voice profiles.
+                <h3 className="text-sm font-semibold text-white font-display">
+                  Create a voice clone
+                </h3>
+                <p className="text-xs text-slate-400 mt-1">
+                  Upload a clean recording of about 1–3 minutes. MP3, WAV, M4A,
+                  AAC, OGG, WebM, or FLAC; maximum 20 MB.
+                </p>
+                <p className="text-xs text-slate-500 mt-1">
+                  Requires ELEVENLABS_API_KEY in the server .env file.
                 </p>
               </div>
             </div>
+            <div className="grid sm:grid-cols-2 gap-3">
+              <label className="text-xs text-slate-300">
+                Voice name
+                <input
+                  type="text"
+                  required
+                  maxLength={80}
+                  value={cloneName}
+                  onChange={(event) => setCloneName(event.target.value)}
+                  className="mt-1.5 w-full px-3 py-2 text-sm bg-[#111827] border border-slate-800 rounded-lg text-white focus:outline-none focus:border-indigo-500"
+                />
+              </label>
+              <label className="text-xs text-slate-300">
+                Voice recording
+                <input
+                  id="voice-clone-audio"
+                  type="file"
+                  required
+                  accept="audio/*"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0] || null;
+                    if (file && file.size > 20 * 1024 * 1024) {
+                      setTtsError('Audio sample must be no larger than 20 MB.');
+                      event.target.value = '';
+                      setCloneAudio(null);
+                      return;
+                    }
+                    setCloneAudio(file);
+                  }}
+                  className="mt-1.5 block w-full text-xs text-slate-300 file:mr-2 file:px-2 file:py-1.5 file:rounded-md file:border file:border-slate-700 file:bg-slate-900 file:text-slate-200"
+                />
+              </label>
+            </div>
+            <label className="flex items-start gap-2 text-xs text-slate-300">
+              <input
+                type="checkbox"
+                checked={cloneConsent}
+                onChange={(event) => setCloneConsent(event.target.checked)}
+                className="mt-0.5 accent-indigo-500"
+              />
+              <span>
+                I confirm this is my voice or I have explicit permission from
+                the voice owner to create and use this clone.
+              </span>
+            </label>
             <button
-              type="button"
-              disabled
-              className="px-4 py-2 text-xs font-medium text-slate-500 bg-slate-900 border border-slate-800 rounded-lg cursor-not-allowed whitespace-nowrap shrink-0"
+              type="submit"
+              disabled={cloningVoice || !cloneAudio || !cloneConsent}
+              className="inline-flex items-center gap-2 px-4 py-2.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 rounded-lg cursor-pointer disabled:cursor-not-allowed"
             >
-              Upload Voice Sample — Coming soon
+              {cloningVoice ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Plus className="w-4 h-4" />
+              )}
+              {cloningVoice ? 'Creating voice...' : 'Create voice clone'}
             </button>
-          </div>
+          </form>
         </div>
 
         {/* Right 5 Cols: Create / Customize Voice Style Profile */}

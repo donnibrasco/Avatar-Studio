@@ -41,36 +41,6 @@ const indexedDbStorage: StateStorage = {
   },
 };
 
-export const INITIAL_AVATARS: AvatarItem[] = [
-  {
-    id: 'avatar-elena',
-    name: 'Elena Vance',
-    imageUrl: '/src/assets/images/avatar_elena_vance_1792896875897.jpg',
-    lookDescription:
-      'Confident woman in her early 30s with shoulder-length dark chestnut hair, warm brown eyes, natural skin texture, wearing a tailored charcoal blazer over a crisp white crew-neck top',
-    outfitVariant: 'Executive charcoal blazer against dark slate studio backdrop',
-    createdAt: 1730000001000,
-  },
-  {
-    id: 'avatar-marcus',
-    name: 'Marcus Chen',
-    imageUrl: '/src/assets/images/avatar_marcus_chen_1792896876225.jpg',
-    lookDescription:
-      'East Asian man in his late 30s with neatly styled short black hair and rectangular glasses, wearing a navy merino knit sweater over a crisp white collared shirt, warm expression',
-    outfitVariant: 'Navy merino knit over white shirt, studio rim lighting',
-    createdAt: 1730000002000,
-  },
-  {
-    id: 'avatar-sofia',
-    name: 'Sofia Rossi',
-    imageUrl: '/src/assets/images/avatar_sofia_rossi_1792896877384.jpg',
-    lookDescription:
-      'Woman in her late 20s with wavy auburn hair and warm olive complexion, subtle gold hoop earrings, wearing an emerald green silk blouse, calm articulate expression',
-    outfitVariant: 'Emerald silk blouse with warm editorial studio key light',
-    createdAt: 1730000003000,
-  },
-];
-
 export const INITIAL_VOICES: VoiceProfile[] = [
   {
     id: 'voice-kore-exec',
@@ -117,7 +87,7 @@ export const INITIAL_SCENES: SceneItem[] = [
     id: 'scene-1',
     scriptText:
       'Welcome to AvatarStudio, where product teams turn written scripts into consistent talking-avatar broadcasts in minutes.',
-    avatarId: 'avatar-elena',
+    avatarId: '',
     voiceProfileId: 'voice-kore-exec',
     background: {
       type: 'gradient',
@@ -135,7 +105,7 @@ export const INITIAL_SCENES: SceneItem[] = [
     id: 'scene-2',
     scriptText:
       'Each scene automatically inherits your presenter look description, voice profile, and framing so facial identity stays locked across every cut.',
-    avatarId: 'avatar-marcus',
+    avatarId: '',
     voiceProfileId: 'voice-puck-warm',
     background: {
       type: 'solid',
@@ -153,7 +123,7 @@ export const INITIAL_SCENES: SceneItem[] = [
     id: 'scene-3',
     scriptText:
       'Arrange your timeline tracks, customize live word-by-word captions, and export a ready-to-share video in landscape, vertical, or square format.',
-    avatarId: 'avatar-sofia',
+    avatarId: '',
     voiceProfileId: 'voice-zephyr-calm',
     background: {
       type: 'gradient',
@@ -273,8 +243,8 @@ export const useStudioStore = create<StudioState>()(
       showOnboarding: false,
       showExportModal: false,
 
-      avatars: INITIAL_AVATARS,
-      defaultAvatarId: 'avatar-elena',
+      avatars: [],
+      defaultAvatarId: '',
 
       voices: INITIAL_VOICES,
       defaultVoiceId: 'voice-kore-exec',
@@ -304,6 +274,9 @@ export const useStudioStore = create<StudioState>()(
         set((state) => ({
           avatars: [newAvatar, ...state.avatars],
           defaultAvatarId: id,
+          scenes: state.scenes.map((scene) =>
+            scene.avatarId ? scene : { ...scene, avatarId: id }
+          ),
         }));
         return id;
       },
@@ -332,9 +305,8 @@ export const useStudioStore = create<StudioState>()(
 
       deleteAvatar: (id) =>
         set((state) => {
-          if (state.avatars.length <= 1) return state;
           const remaining = state.avatars.filter((a) => a.id !== id);
-          const fallbackId = remaining[0].id;
+          const fallbackId = remaining[0]?.id || '';
           return {
             avatars: remaining,
             defaultAvatarId:
@@ -708,6 +680,36 @@ export const useStudioStore = create<StudioState>()(
     {
       name: 'avatar-studio-indexeddb-v1',
       storage: createJSONStorage(() => indexedDbStorage),
+      version: 1,
+      migrate: (persistedState) => {
+        const state = persistedState as Partial<StudioState>;
+        const sampleAvatarIds = new Set([
+          'avatar-elena',
+          'avatar-marcus',
+          'avatar-sofia',
+        ]);
+        const avatars = (state.avatars || []).filter(
+          (avatar) => !sampleAvatarIds.has(avatar.id)
+        );
+        const avatarIds = new Set(avatars.map((avatar) => avatar.id));
+        const defaultAvatarId =
+          state.defaultAvatarId && avatarIds.has(state.defaultAvatarId)
+            ? state.defaultAvatarId
+            : avatars[0]?.id || '';
+        const scenes = (state.scenes || INITIAL_SCENES).map((scene) => ({
+          ...scene,
+          avatarId: avatarIds.has(scene.avatarId)
+            ? scene.avatarId
+            : defaultAvatarId,
+        }));
+
+        return {
+          ...state,
+          avatars,
+          defaultAvatarId,
+          scenes,
+        } as StudioState;
+      },
       partialize: (state) => ({
         projectName: state.projectName,
         activeTab: state.activeTab,

@@ -16,6 +16,7 @@ import {
 export const OnboardingModal: React.FC = () => {
   const showOnboarding = useStudioStore((s) => s.showOnboarding);
   const setShowOnboarding = useStudioStore((s) => s.setShowOnboarding);
+  const setActiveTab = useStudioStore((s) => s.setActiveTab);
   const avatars = useStudioStore((s) => s.avatars);
   const voices = useStudioStore((s) => s.voices);
   const defaultAvatarId = useStudioStore((s) => s.defaultAvatarId);
@@ -39,9 +40,15 @@ export const OnboardingModal: React.FC = () => {
   const previewScenes = splitScriptIntoScenes(scriptDraft, 1.0);
 
   const handleFinish = () => {
+    const avatarId = selectedAvatarId || avatars[0]?.id;
+    if (!avatarId) {
+      setShowOnboarding(false);
+      setActiveTab('avatars');
+      return;
+    }
     resetNewProject({
       projectName,
-      avatarId: selectedAvatarId || avatars[0]?.id,
+      avatarId,
       voiceId: selectedVoiceId || voices[0]?.id,
       script: scriptDraft.trim() || fullScript,
       aspectRatio,
@@ -139,7 +146,25 @@ export const OnboardingModal: React.FC = () => {
                 consistent look description reused in every Veo prompt.
               </p>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {avatars.length === 0 && (
+                <div className="p-5 rounded-lg bg-[#0B0F19] border border-dashed border-slate-700 text-center">
+                  <p className="text-sm font-semibold text-white">
+                    Create your first avatar before starting a project.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowOnboarding(false);
+                      setActiveTab('avatars');
+                    }}
+                    className="mt-3 px-3 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg cursor-pointer"
+                  >
+                    Go to Avatar Library
+                  </button>
+                </div>
+              )}
+              {avatars.length > 0 && (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 {avatars.map((av) => {
                   const isSelected = selectedAvatarId === av.id;
                   return (
@@ -170,7 +195,8 @@ export const OnboardingModal: React.FC = () => {
                     </button>
                   );
                 })}
-              </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -203,7 +229,7 @@ export const OnboardingModal: React.FC = () => {
                         </span>
                       </div>
                       <p className="text-xs text-slate-400 mt-1">
-                        Voice: {v.prebuiltVoice} · Tone: {v.tone}
+                        Voice: {v.prebuiltVoice || 'Custom voice'} · Tone: {v.tone}
                       </p>
                       <p className="text-xs text-slate-500 mt-1.5 line-clamp-1">
                         {v.accentNotes}
@@ -344,8 +370,9 @@ export const OnboardingModal: React.FC = () => {
           {step < 4 ? (
             <button
               type="button"
+              disabled={step === 1 && avatars.length === 0}
               onClick={() => setStep(step + 1)}
-              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors cursor-pointer"
             >
               <span>Next Step</span>
               <ArrowRight className="w-3.5 h-3.5" />

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useStudioStore } from '../store/useStudioStore';
 import { AvatarItem } from '../types/studio';
+import { API_BASE_URL } from '../utils/api';
 import {
   Plus,
   Upload,
@@ -83,7 +84,7 @@ export const AvatarLibrary: React.FC = () => {
     setGeneratingOptions(true);
     setCreateError(null);
     try {
-      const response = await fetch('/api/avatars/generate', {
+      const response = await fetch(`${API_BASE_URL}/avatars/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -139,9 +140,11 @@ export const AvatarLibrary: React.FC = () => {
 
     let chosenImage = '';
     if (createMode === 'ai') {
-      chosenImage =
-        generatedOptions[selectedOptionIdx] ||
-        '/src/assets/images/avatar_elena_vance_1792896875897.jpg';
+      chosenImage = generatedOptions[selectedOptionIdx] || '';
+      if (!chosenImage) {
+        setCreateError('Generate avatar options before saving this avatar.');
+        return;
+      }
     } else {
       if (!uploadedDataUrl) {
         setCreateError('Please upload a reference photo first.');
@@ -219,6 +222,17 @@ export const AvatarLibrary: React.FC = () => {
       </div>
 
       {/* Avatar Grid */}
+      {avatars.length === 0 && (
+        <div className="p-8 rounded-xl bg-[#0B0F19] border border-dashed border-slate-700 text-center">
+          <User className="w-8 h-8 text-indigo-400 mx-auto mb-3" />
+          <h2 className="text-sm font-semibold text-white">
+            Create your first avatar
+          </h2>
+          <p className="text-xs text-slate-400 mt-1">
+            Upload your own reference photo or generate an avatar to get started.
+          </p>
+        </div>
+      )}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {avatars.map((avatar) => {
           const isDefault = avatar.id === defaultAvatarId;
@@ -394,13 +408,8 @@ export const AvatarLibrary: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => deleteAvatar(avatar.id)}
-                      disabled={avatars.length <= 1}
                       aria-label={`Delete ${avatar.name}`}
-                      title={
-                        avatars.length <= 1
-                          ? 'At least one avatar is required'
-                          : 'Delete Avatar'
-                      }
+                      title="Delete Avatar"
                       className="p-2 text-slate-400 hover:text-rose-400 hover:bg-slate-800 disabled:opacity-40 disabled:pointer-events-none rounded-lg transition-colors cursor-pointer"
                     >
                       <Trash2 className="w-3.5 h-3.5" />

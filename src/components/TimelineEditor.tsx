@@ -11,6 +11,7 @@ import {
   buildVeoPrompt,
   calculateTimelineOffsets,
 } from '../utils/studioLogic';
+import { API_BASE_URL } from '../utils/api';
 import {
   Play,
   Pause,
@@ -331,12 +332,14 @@ export const TimelineEditor: React.FC = () => {
         accentNotes: voice.accentNotes,
       });
 
-      const response = await fetch('/api/tts/generate', {
+      const response = await fetch(`${API_BASE_URL}/tts/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           text: scene.scriptText,
           voiceName: voice.prebuiltVoice,
+          elevenLabsVoiceId: voice.elevenLabsVoiceId,
+          pace: voice.pace,
           stylePrompt,
         }),
       });
@@ -366,6 +369,12 @@ export const TimelineEditor: React.FC = () => {
     const scene = scenes.find((s) => s.id === sceneId);
     if (!scene) return;
     const avatar = avatars.find((a) => a.id === scene.avatarId) || avatars[0];
+    if (!avatar) {
+      setInspectorError(
+        'Create or upload your first avatar before generating a video.'
+      );
+      return;
+    }
 
     setInspectorError(null);
 
@@ -390,7 +399,7 @@ export const TimelineEditor: React.FC = () => {
     );
 
     try {
-      const response = await fetch('/api/veo/start', {
+      const response = await fetch(`${API_BASE_URL}/veo/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -428,7 +437,7 @@ export const TimelineEditor: React.FC = () => {
 
         try {
           const pollRes = await fetch(
-            `/api/veo/status/${encodeURIComponent(interactionId)}`
+            `${API_BASE_URL}/veo/status/${encodeURIComponent(interactionId)}`
           );
           const pollData = await pollRes.json();
 
@@ -506,7 +515,7 @@ export const TimelineEditor: React.FC = () => {
     setGeneratingBg(true);
     setInspectorError(null);
     try {
-      const response = await fetch('/api/avatars/generate', {
+      const response = await fetch(`${API_BASE_URL}/avatars/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1001,6 +1010,11 @@ export const TimelineEditor: React.FC = () => {
                       }
                       className="w-full px-3 py-2 text-xs bg-[#0B0F19] border border-slate-800 rounded-lg text-white focus:outline-none focus:border-indigo-500"
                     >
+                      {avatars.length === 0 && (
+                        <option value="" disabled>
+                          Create your first avatar to continue
+                        </option>
+                      )}
                       {avatars.map((a) => (
                         <option key={a.id} value={a.id}>
                           {a.name}
@@ -1028,9 +1042,11 @@ export const TimelineEditor: React.FC = () => {
                     >
                       {voices.map((v) => (
                         <option key={v.id} value={v.id}>
-                          {v.name.includes(v.prebuiltVoice)
+                          {v.elevenLabsVoiceId
+                            ? `${v.name} (voice clone)`
+                            : v.prebuiltVoice && v.name.includes(v.prebuiltVoice)
                             ? v.name
-                            : `${v.name} (${v.prebuiltVoice})`}
+                            : `${v.name} (${v.prebuiltVoice || 'Google voice'})`}
                         </option>
                       ))}
                     </select>
@@ -1758,12 +1774,18 @@ export const TimelineEditor: React.FC = () => {
                       }`}
                     >
                       <GripVertical className="w-3.5 h-3.5 text-slate-500 group-hover:text-slate-300 shrink-0 cursor-grab" />
-                      <img
-                        src={av?.imageUrl}
-                        alt={av?.name}
-                        referrerPolicy="no-referrer"
-                        className="w-9 h-9 rounded object-cover border border-slate-700 shrink-0"
-                      />
+                      {av ? (
+                        <img
+                          src={av.imageUrl}
+                          alt={av.name}
+                          referrerPolicy="no-referrer"
+                          className="w-9 h-9 rounded object-cover border border-slate-700 shrink-0"
+                        />
+                      ) : (
+                        <div className="w-9 h-9 rounded border border-dashed border-slate-700 shrink-0 flex items-center justify-center text-[8px] text-slate-500">
+                          Add avatar
+                        </div>
+                      )}
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center justify-between gap-1 text-xs">
                           <span className="font-semibold text-white truncate">
@@ -1816,7 +1838,10 @@ export const TimelineEditor: React.FC = () => {
                       }`}
                     >
                       <span className="truncate">
-                        {voice?.prebuiltVoice} · {voice?.tone}
+                        {voice?.elevenLabsVoiceId
+                          ? 'Voice clone'
+                          : voice?.prebuiltVoice || 'Voice'}{' '}
+                        · {voice?.tone}
                       </span>
                       <span className="font-mono text-[10px] shrink-0">
                         {scene.audioGenerating

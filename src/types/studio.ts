@@ -28,7 +28,9 @@ export interface AvatarItem {
 export interface VoiceProfile {
   id: string;
   name: string;
-  prebuiltVoice: PrebuiltVoiceName;
+  prebuiltVoice?: PrebuiltVoiceName;
+  elevenLabsVoiceId?: string;
+  requiresVerification?: boolean;
   pace: number; // 0.8 to 1.25
   tone: VoiceTone;
   accentNotes: string;

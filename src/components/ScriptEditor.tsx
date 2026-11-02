@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useStudioStore } from '../store/useStudioStore';
 import { splitScriptIntoScenes } from '../utils/studioLogic';
+import { API_BASE_URL } from '../utils/api';
 import {
   Wand2,
   Scissors,
@@ -54,7 +55,7 @@ export const ScriptEditor: React.FC = () => {
     setAiLoadingAction(action);
     setAiError(null);
     try {
-      const response = await fetch('/api/script/assist', {
+      const response = await fetch(`${API_BASE_URL}/script/assist`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
