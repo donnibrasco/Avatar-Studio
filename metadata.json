@@ -1,0 +1,6 @@
+{
+  "name": "AvatarStudio",
+  "description": "AI avatar video studio for creating reusable digital presenters, voice styles, multi-scene scripts, timeline compositions, and exported talking-avatar videos.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
