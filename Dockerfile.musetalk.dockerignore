@@ -1,0 +1,7 @@
+**
+!Dockerfile.musetalk
+!ops/
+!ops/musetalk/
+!ops/musetalk/requirements.txt
+!ops/musetalk/download_models.py
+!ops/musetalk/worker.py

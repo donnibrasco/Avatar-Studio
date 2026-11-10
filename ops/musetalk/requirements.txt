@@ -1,0 +1,22 @@
+# Python 3.10; torch/vision/audio and mmcv are installed in the Dockerfile.
+diffusers==0.30.2
+accelerate==0.28.0
+numpy==1.23.5
+opencv-python==4.9.0.80
+soundfile==0.12.1
+transformers==4.39.2
+huggingface-hub==0.30.2
+librosa==0.11.0
+einops==0.8.1
+omegaconf==2.3.0
+requests==2.32.3
+gdown==5.2.0
+runpod==1.7.13
+mmengine==0.10.7
+mmdet==3.1.0
+mmpose==1.1.0
+# Required by the upstream face detector and MMPose imports.
+scikit-image==0.21.0
+scipy==1.10.1
+xtcocotools==1.14.3
+chumpy==0.70
