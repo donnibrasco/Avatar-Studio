@@ -1,0 +1,55 @@
+name: Build MuseTalk worker
+on:
+  push:
+    branches: [deploy/musetalk-first-video]
+    paths:
+      - Dockerfile.musetalk
+      - Dockerfile.musetalk.dockerignore
+      - ops/musetalk/worker.py
+      - ops/musetalk/download_models.py
+      - ops/musetalk/requirements.txt
+      - .github/workflows/musetalk-image.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+  packages: write
+concurrency:
+  group: musetalk-image-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  image:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Free space on the disposable runner
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc
+          docker system prune -af
+          df -h .
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and publish the immutable worker
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.musetalk
+          platforms: linux/amd64
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/avatar-studio-musetalk:${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          provenance: mode=max
+          sbom: true
+      - name: Record deployment reference
+        env:
+          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          echo "Image: ghcr.io/${{ github.repository_owner }}/avatar-studio-musetalk@${IMAGE_DIGEST}" >> "$GITHUB_STEP_SUMMARY"
+          echo 'This workflow publishes worker code and public model weights only. No app secrets or user media enter the build context.' >> "$GITHUB_STEP_SUMMARY"

@@ -28,7 +28,8 @@ def main():
         target = ROOT / destination
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(downloaded, target)
-        manifest.append({"repo": repo, "revision": revision, "file": destination})
+        manifest.append({"repo": repo, "revision": revision, "file": destination,
+                         "sha256": hashlib.sha256(target.read_bytes()).hexdigest(), "bytes": target.stat().st_size})
     face = ROOT / "models/face-parse-bisent"
     face.mkdir(parents=True, exist_ok=True)
     target = face / "79999_iter.pth"

@@ -11,7 +11,8 @@ import re
 import subprocess
 import tempfile
 import threading
-from urllib.parse import urlparse
+import time
+from urllib.parse import urlparse, parse_qsl
 
 FPS = 25
 ROOT = Path(os.environ.get("MUSETALK_ROOT", "/opt/MuseTalk"))
@@ -24,9 +25,17 @@ def media_url(value, expected_path):
     parsed = urlparse(value if isinstance(value, str) else "")
     if (base.scheme != "https" or not base.netloc or base.path.rstrip("/") != "/videolab"
             or parsed.scheme != "https" or parsed.netloc != base.netloc
-            or parsed.username or parsed.password or parsed.query or parsed.fragment
+            or parsed.username or parsed.password or parsed.fragment
             or not re.fullmatch(expected_path, parsed.path)):
         raise ValueError("Media must use the configured Studio HTTPS origin and cached path")
+    if parsed.query:
+        pairs = parse_qsl(parsed.query, keep_blank_values=True)
+        params = dict(pairs)
+        if (not parsed.path.startswith("/videolab/api/media/") or len(pairs) != 2
+                or set(params) != {"expires", "token"}
+                or not re.fullmatch(r"\d{10}", params["expires"])
+                or not re.fullmatch(r"[a-f0-9]{64}", params["token"])):
+            raise ValueError("Only signed Studio media URLs are accepted")
     return value
 
 
@@ -187,6 +196,7 @@ class MuseTalk:
 def handler(job):
     global RUNTIME
     data = validate(job.get("input"))
+    started = time.monotonic()
     import requests
     with LOCK, tempfile.TemporaryDirectory(prefix="studio-musetalk-") as temporary:
         directory = Path(temporary)
@@ -216,9 +226,19 @@ def handler(job):
         receipt = response.json()
         if receipt.get("uploaded") is not True or receipt.get("sha256") != digest:
             raise RuntimeError("Studio output receipt did not match")
-        return {"uploaded": True, "sha256": digest, "duration": seconds, "fps": FPS}
+        telemetry = {"handler_seconds": round(time.monotonic() - started, 3)}
+        try:
+            import torch
+            telemetry["peak_gpu_memory_mib"] = round(torch.cuda.max_memory_allocated() / 1048576, 1)
+        except ImportError:
+            pass
+        return {"uploaded": True, "sha256": digest, "duration": seconds, "fps": FPS, **telemetry}
 
 
 if __name__ == "__main__":
     import runpod
+    # Acquire the models before declaring the queue worker ready.
+    os.chdir(ROOT)
+    RUNTIME = MuseTalk()
+    print("[musetalk-worker] CUDA models loaded; ready for jobs", flush=True)
     runpod.serverless.start({"handler": handler})

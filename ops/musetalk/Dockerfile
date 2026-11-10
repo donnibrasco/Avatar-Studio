@@ -1,6 +1,6 @@
 # MuseTalk's MMLab extensions target torch 2.0 / CUDA 11.8, so use the
 # matching NVIDIA runtime instead of replacing a newer Runpod torch stack.
-FROM nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu22.04
+FROM nvidia/cuda@sha256:f6913f3c02f297877f6859d12ff330043c0be668fdad86868c29a239a5a82151
 ENV DEBIAN_FRONTEND=noninteractive PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1 \
     PYTHONPATH=/opt/MuseTalk:/opt/MuseTalk/musetalk/utils \
     HF_HOME=/opt/hf-cache MUSETALK_ROOT=/opt/MuseTalk
@@ -20,6 +20,7 @@ RUN git clone https://github.com/TMElyralab/MuseTalk.git /opt/MuseTalk \
 COPY requirements.txt /opt/worker/requirements.txt
 RUN python3 -m pip install --no-build-isolation -r /opt/worker/requirements.txt \
     && python3 -m pip check
+RUN python3 -m pip freeze > /opt/worker/installed-requirements.lock
 # Fixed, public models are baked once; replacements do not download them during a job.
 # No account keys or private .env files are copied into this build context.
 COPY download_models.py /opt/worker/download_models.py

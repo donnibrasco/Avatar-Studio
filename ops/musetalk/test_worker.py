@@ -24,12 +24,16 @@ class WorkerTests(unittest.TestCase):
 
     def test_contract_rejects_untrusted_and_mismatched_media(self):
         self.assertEqual(worker.validate(self.data), self.data)
+        signed = self.data["source_url"] + "?expires=1999999999&token=" + "c" * 64
+        self.assertEqual(worker.validate({**self.data, "source_url": signed})["source_url"], signed)
         cases = [
             {"source_url": "https://attacker.test/videolab/api/media/avatars/" + "a" * 64 + ".jpg"},
             {"audio_url": "http://169.254.169.254/metadata"},
             {"source_url": self.data["source_url"] + "?redirect=http://localhost"},
             {"output_url": "https://studio.test/videolab/api/veo/output/another-job"},
             {"source_kind": "video"}, {"request_id": "../escape"}, {"resolution": "720p"}, {"output_token": ""},
+            {"source_url": signed + "&token=" + "d" * 64},
+            {"output_url": self.data["output_url"] + "?expires=1999999999&token=" + "c" * 64},
         ]
         for change in cases:
             with self.subTest(change=change), self.assertRaises(ValueError):
