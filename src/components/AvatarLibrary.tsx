@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useStudioStore } from '../store/useStudioStore';
 import { AvatarItem } from '../types/studio';
-import { API_BASE_URL } from '../utils/api';
+import { API_BASE_URL, readApiJson } from '../utils/api';
 import {
   Plus,
   Upload,
@@ -94,7 +94,7 @@ export const AvatarLibrary: React.FC = () => {
           aspectRatio: '1:1',
         }),
       });
-      const data = await response.json();
+      const data = await readApiJson(response);
       if (!response.ok || !data.images?.length) {
         throw new Error(
           data.error || 'Could not generate avatar options. Please try again.'

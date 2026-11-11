@@ -1,3 +1,4 @@
+import { buildLipSyncPrompt } from "./lipSync";
 import {
   AvatarPosition,
   EmotionGesture,
@@ -141,52 +142,11 @@ export interface VeoPromptParams {
   backgroundDesc?: string;
 }
 
-/**
- * Builds a consistent Veo image-to-video prompt from:
- * - Avatar's saved look description & outfit variant
- * - Scene emotion/gesture
- * - Framing ("medium close-up, facing camera, natural head movement")
- * - Spoken script line
- */
+/** Compatibility entrypoint for timeline callers; image/audio remain authoritative. */
 export function buildVeoPrompt(params: VeoPromptParams): string {
-  const look = params.lookDescription.trim() || `Professional presenter ${params.avatarName}`;
-  const outfit = params.outfitVariant?.trim()
-    ? ` Outfit & setting detail: ${params.outfitVariant.trim()}.`
-    : '';
-
-  const gestureMap: Record<EmotionGesture, string> = {
-    neutral:
-      'calm, composed neutral expression with natural micro-expressions and steady eye contact',
-    smiling:
-      'warm, approachable smiling expression with friendly eyes and welcoming demeanor',
-    serious:
-      'focused, authoritative serious expression with deliberate, measured delivery',
-    'explaining with hand gestures':
-      'articulate presenter expression, explaining with natural conversational hand gestures',
-  };
-
-  const framingMap: Record<AvatarPosition, string> = {
-    center:
-      'medium close-up, centered in frame, facing camera, natural head movement',
-    left: 'medium close-up, positioned slightly left of center, facing camera, natural head movement',
-    right:
-      'medium close-up, positioned slightly right of center, facing camera, natural head movement',
-    'small corner':
-      'medium close-up portrait framing, facing camera, natural head movement',
-  };
-
-  const bgNote = params.backgroundDesc?.trim()
-    ? ` Studio lighting matching ${params.backgroundDesc.trim()}.`
-    : ' Soft diffused studio lighting, shallow depth of field.';
-
-  const cleanLine = params.scriptText.replace(/\s+/g, ' ').trim();
-
-  return [
-    `Consistent presenter appearance: ${look}.${outfit}`,
-    `Framing: ${framingMap[params.position] || framingMap.center}.`,
-    `Performance & gesture: ${gestureMap[params.emotionGesture] || gestureMap.neutral}.`,
-    `Talking-head broadcast video: the presenter is actively speaking aloud to the camera with realistic mouth articulation, accurate lip-sync, and natural facial movements, saying: "${cleanLine}"${bgNote}`,
-  ].join(' ');
+  // Composition, identity, clothing and lighting come from the uploaded image.
+  // Do not ask the video model to re-create them from a text description.
+  return buildLipSyncPrompt();
 }
 
 /**

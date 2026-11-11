@@ -151,6 +151,8 @@ export const INITIAL_CAPTIONS: CaptionSettings = {
 };
 
 interface StudioState {
+  activeJobId: string | null;
+  setActiveJobId: (id: string | null) => void;
   projectName: string;
   activeTab: WorkspaceTab;
   aspectRatio: AspectRatioOption;
@@ -237,6 +239,8 @@ function pushSnapshot(state: StudioState): StudioSnapshot[] {
 export const useStudioStore = create<StudioState>()(
   persist(
     (set, get) => ({
+      activeJobId: null,
+      setActiveJobId: (activeJobId) => set({ activeJobId }),
       projectName: 'Q4 Autonomous Workflow Keynote',
       activeTab: 'timeline',
       aspectRatio: '16:9',
@@ -711,6 +715,7 @@ export const useStudioStore = create<StudioState>()(
         } as StudioState;
       },
       partialize: (state) => ({
+        activeJobId: state.activeJobId,
         projectName: state.projectName,
         activeTab: state.activeTab,
         aspectRatio: state.aspectRatio,

@@ -1,6 +1,32 @@
 export type WorkspaceTab = 'avatars' | 'voices' | 'script' | 'timeline';
 
-export type PrebuiltVoiceName = 'Kore' | 'Puck' | 'Charon' | 'Fenrir' | 'Zephyr';
+// Legacy names remain readable in existing saved projects; active presets use Chatterbox IDs.
+export type PrebuiltVoiceName =
+  | "Kore"
+  | "Puck"
+  | "Charon"
+  | "Fenrir"
+  | "Zephyr"
+  | "aaron"
+  | "abigail"
+  | "anaya"
+  | "andy"
+  | "archer"
+  | "brian"
+  | "chloe"
+  | "dylan"
+  | "emmanuel"
+  | "ethan"
+  | "evelyn"
+  | "gavin"
+  | "gordon"
+  | "ivan"
+  | "laura"
+  | "lucy"
+  | "madison"
+  | "marisol"
+  | "meera"
+  | "walter";
 
 export type VoiceTone = 'warm' | 'energetic' | 'calm' | 'authoritative';
 
@@ -20,6 +46,7 @@ export interface AvatarItem {
   id: string;
   name: string;
   imageUrl: string;
+  sourceVideoUrl?: string;
   lookDescription: string;
   outfitVariant: string;
   createdAt: number;

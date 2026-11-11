@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useStudioStore } from '../store/useStudioStore';
 import { splitScriptIntoScenes } from '../utils/studioLogic';
-import { API_BASE_URL } from '../utils/api';
+import { API_BASE_URL, readApiJson } from '../utils/api';
 import {
   Wand2,
   Scissors,
@@ -65,7 +65,7 @@ export const ScriptEditor: React.FC = () => {
           targetTone: customTone || toneTarget,
         }),
       });
-      const data = await response.json();
+      const data = await readApiJson(response);
       if (!response.ok || !data.script) {
         throw new Error(
           data.error || 'Gemini script assistant could not complete request.'

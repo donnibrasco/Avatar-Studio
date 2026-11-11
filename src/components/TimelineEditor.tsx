@@ -11,7 +11,7 @@ import {
   buildVeoPrompt,
   calculateTimelineOffsets,
 } from '../utils/studioLogic';
-import { API_BASE_URL } from '../utils/api';
+import { API_BASE_URL, readApiJson } from '../utils/api';
 import {
   Play,
   Pause,
@@ -343,7 +343,7 @@ export const TimelineEditor: React.FC = () => {
           stylePrompt,
         }),
       });
-      const data = await response.json();
+      const data = await readApiJson(response);
       if (!response.ok || !data.audioUrl) {
         throw new Error(data.error || 'Voiceover synthesis failed.');
       }
@@ -376,6 +376,10 @@ export const TimelineEditor: React.FC = () => {
       return;
     }
 
+    if (!scene.audioUrl) {
+      setInspectorError('Generate and preview the scene audio before rendering lip-sync.');
+      return;
+    }
     setInspectorError(null);
 
     const veoPrompt = buildVeoPrompt({
@@ -404,12 +408,15 @@ export const TimelineEditor: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           prompt: veoPrompt,
+          script: scene.scriptText,
+          audioUrl: scene.audioUrl,
+          resolution: '720p',
           avatarImageUrl: avatar.imageUrl,
           aspectRatio,
         }),
       });
 
-      const data = await response.json();
+      const data = await readApiJson(response);
       if (!response.ok || !data.interactionId) {
         throw new Error(data.error || 'Could not start Veo video generation.');
       }
@@ -439,7 +446,7 @@ export const TimelineEditor: React.FC = () => {
           const pollRes = await fetch(
             `${API_BASE_URL}/veo/status/${encodeURIComponent(interactionId)}`
           );
-          const pollData = await pollRes.json();
+          const pollData = await readApiJson(pollRes);
 
           if (pollData.status === 'completed' && pollData.videoUrl) {
             clearInterval(pollTimersRef.current[sceneId]);
@@ -530,7 +537,7 @@ export const TimelineEditor: React.FC = () => {
           isBackgroundOnly: true,
         }),
       });
-      const data = await response.json();
+      const data = await readApiJson(response);
       if (!response.ok || !data.images?.[0]) {
         throw new Error(data.error || 'Could not generate background image.');
       }

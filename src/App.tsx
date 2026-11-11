@@ -5,7 +5,8 @@
 
 import React from 'react';
 import { SimpleAvatarStudio } from './components/SimpleAvatarStudio';
+import { StudioAccess } from './components/StudioAccess';
 
 export default function App() {
-  return <SimpleAvatarStudio />;
+  return <StudioAccess><SimpleAvatarStudio /></StudioAccess>;
 }

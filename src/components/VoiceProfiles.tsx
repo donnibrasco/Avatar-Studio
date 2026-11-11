@@ -2,7 +2,7 @@ import React, { useRef, useState } from 'react';
 import { useStudioStore } from '../store/useStudioStore';
 import { PrebuiltVoiceName, VoiceProfile, VoiceTone } from '../types/studio';
 import { buildTtsStylePrompt } from '../utils/studioLogic';
-import { API_BASE_URL } from '../utils/api';
+import { API_BASE_URL, readApiJson } from '../utils/api';
 import {
   Volume2,
   Play,
@@ -157,7 +157,7 @@ export const VoiceProfiles: React.FC = () => {
         }),
       });
 
-      const data = await response.json();
+      const data = await readApiJson(response);
       if (!response.ok || !data.audioUrl) {
         throw new Error(data.error || 'Failed to generate Gemini TTS preview.');
       }
@@ -229,7 +229,7 @@ export const VoiceProfiles: React.FC = () => {
           consent: cloneConsent,
         }),
       });
-      const data = await response.json();
+      const data = await readApiJson(response);
       if (!response.ok || !data.voiceId) {
         throw new Error(data.error || 'Could not clone this voice sample.');
       }
@@ -280,7 +280,7 @@ export const VoiceProfiles: React.FC = () => {
           `${API_BASE_URL}/voice/${encodeURIComponent(profile.elevenLabsVoiceId)}`,
           { method: 'DELETE' }
         );
-        const data = await response.json();
+        const data = await readApiJson(response);
         if (!response.ok) {
           throw new Error(data.error || 'Could not delete the cloned voice.');
         }

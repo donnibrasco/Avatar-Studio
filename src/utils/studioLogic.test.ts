@@ -35,7 +35,7 @@ test('splitScriptIntoScenes splits multi-sentence script into 5-8s scenes on sen
   }
 });
 
-test('buildVeoPrompt includes avatar look description, framing, emotion/gesture, and spoken line', () => {
+test('lip-sync prompt keeps identity and audio authoritative over restyling instructions', () => {
   const prompt = buildVeoPrompt({
     avatarName: 'Elena Vance',
     lookDescription: 'Woman in early 30s with dark chestnut hair and charcoal blazer',
@@ -45,11 +45,12 @@ test('buildVeoPrompt includes avatar look description, framing, emotion/gesture,
     scriptText: 'Here is how our unified timeline works.',
   });
 
-  assert.ok(prompt.includes('Woman in early 30s with dark chestnut hair and charcoal blazer'));
-  assert.ok(prompt.includes('medium close-up'));
-  assert.ok(prompt.includes('facing camera, natural head movement'));
-  assert.ok(prompt.includes('explaining with natural conversational hand gestures'));
-  assert.ok(prompt.includes('"Here is how our unified timeline works."'));
+  assert.match(prompt, /provided audio is the sole source of speech and timing/);
+  assert.match(prompt, /mouth relaxed and still during silence/);
+  assert.match(prompt, /same person's facial identity/);
+  assert.ok(!prompt.includes('Executive slate studio backdrop'));
+  assert.ok(!prompt.includes('Here is how our unified timeline works.'));
+
 });
 
 test('buildTtsStylePrompt formats tone, pace, and accent notes cleanly', () => {
