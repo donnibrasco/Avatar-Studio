@@ -1,0 +1,33 @@
+{
+  "image": "ghcr.io/donnibrasco/avatar-studio-musetalk@sha256:6c984f48491b23f4f88e550df639f1340263440ca1ee994948024236f322671e",
+  "anonymousPullVerified": true,
+  "httpStatus": 200,
+  "mediaType": "application/vnd.oci.image.index.v1+json",
+  "manifests": [
+    {
+      "mediaType": "application/vnd.oci.image.manifest.v1+json",
+      "digest": "sha256:db7069a209a967fb4cdfd40be8fb6734efba58fb70643a56e7c2511e166ebe62",
+      "size": 4115,
+      "platform": {
+        "architecture": "amd64",
+        "os": "linux"
+      }
+    },
+    {
+      "mediaType": "application/vnd.oci.image.manifest.v1+json",
+      "digest": "sha256:d2db1d0458737f8cbc5de2e91a62bdf7aa1a33c670e173f7ac0e857e7220a13a",
+      "size": 1112,
+      "annotations": {
+        "vnd.docker.reference.digest": "sha256:db7069a209a967fb4cdfd40be8fb6734efba58fb70643a56e7c2511e166ebe62",
+        "vnd.docker.reference.type": "attestation-manifest"
+      },
+      "platform": {
+        "architecture": "unknown",
+        "os": "unknown"
+      }
+    }
+  ],
+  "deployedImage": "ghcr.io/donnibrasco/avatar-studio-musetalk@sha256:db7069a209a967fb4cdfd40be8fb6734efba58fb70643a56e7c2511e166ebe62",
+  "buildCommit": "71a1e7ad7a78f8edd8e81ef5bc1b4021b27dcca8",
+  "buildRun": "https://github.com/donnibrasco/Avatar-Studio/actions/runs/42921813612"
+}

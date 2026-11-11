@@ -1,0 +1,42 @@
+{
+  "name": "avatar-studio-musetalk",
+  "type": "QUEUE",
+  "image": "ghcr.io/donnibrasco/avatar-studio-musetalk@sha256:db7069a209a967fb4cdfd40be8fb6734efba58fb70643a56e7c2511e166ebe62",
+  "disk": 50,
+  "entrypoint": [
+    "python3",
+    "-u",
+    "/opt/worker/worker.py"
+  ],
+  "cmd": [],
+  "gpu": {
+    "pools": [
+      "AMPERE_24"
+    ],
+    "excludedTypes": [
+      "NVIDIA GeForce RTX 3090",
+      "NVIDIA L4",
+      "NVIDIA RTX PRO 6000 Blackwell Server Edition MIG 1g.24gb"
+    ],
+    "count": 1,
+    "minCudaVersion": "12.8"
+  },
+  "workers": {
+    "min": 0,
+    "max": 1,
+    "idleTimeout": 5
+  },
+  "scaling": {
+    "type": "QUEUE_DELAY",
+    "queueDelay": 4
+  },
+  "timeout": 600000,
+  "flashboot": "FLASHBOOT",
+  "env": {
+    "STUDIO_BASE_URL": "https://office.creativeprocess.io/videolab",
+    "MUSETALK_ROOT": "/opt/MuseTalk",
+    "PYTHONUNBUFFERED": "1",
+    "PIP_NO_CACHE_DIR": "1",
+    "OMP_NUM_THREADS": "2"
+  }
+}

@@ -1,171 +1,103 @@
-# Studio avatar worker (MuseTalk 1.5)
+# MuseTalk private studio release
 
-Avatar Studio can use a photo or an uploaded avatar video with new speech. The
-`runpod-musetalk` engine prepares the face, lip-syncs it, uploads the silent result
-to the app, and exports it with the original selected voice. Output is 480p,
-25 fps, landscape or portrait, with speech between 0.2 and 60 seconds. A photo
-gets mouth animation; new body gestures are not generated. A video retains its
-existing motion, repeating forwards then backwards when the speech is longer.
+The deployed worker uses a built image containing the MuseTalk 1.5 source,
+Python/system dependencies and model weights. It runs directly without package
+installation at startup. Image and build provenance are in `image-manifest.json`.
+The source branch is `deploy/musetalk-first-video` in `donnibrasco/Avatar-Studio`.
 
-**Status: authored and locally checked; container build, actual model inference,
-GPU memory/quality, and Runpod end-to-end rendering are unverified.** No MuseTalk
-endpoint was created. The app keeps `MUSETALK_GENERATION_ENABLED=false` by default.
-The next external requirement is a Linux Docker builder and registry destination,
-or a Runpod GitHub build connection. Docker is not installed on this workspace host.
+## Validated scope
 
-## Build and publish
+One private workspace for its owner and trusted team, with one avatar job at a
+time. Sign-in protects paid APIs, job details and media. Worker inputs use signed
+links valid for one hour; output uploads use a separate job-specific token.
+This release does not provide public registration or independent customer tenants.
+See [private studio operations](../PRIVATE_STUDIO.md) for access, budgets and recovery.
 
-For Runpod GitHub builds with repository-root context, use the root
-`Dockerfile.musetalk` and its matching `Dockerfile.musetalk.dockerignore`.
-They copy only the worker files from `ops/musetalk`. The root-level
-`musetalk-runpod-source.zip` is an alternative standalone build context: extract
-it and build its `Dockerfile` with `.` as context. Neither route includes `.env`
-or user media.
+Actual GPU validations completed:
 
-The initial GitHub image build must be started through Runpod's console
-integration after source publication. The current MCP endpoint-create schema
-requires a built image, and its build tools inspect existing builds. Once the
-initial build starts, MCP can inspect its progress and configure the endpoint.
+| Input | Output | Result |
+| --- | --- | --- |
+| First male photo and existing speech | 10 s, landscape 854×480 | Completed |
+| Different male photo and fresh Chatterbox speech | 5.92 s, portrait 480×854 | Completed |
+| Five-second moving avatar clip and repeated speech | 59.8 s, portrait 480×854 | Completed on the built image |
 
-For the standalone Docker build below, the context is this directory. Its allowlist excludes
-account keys, user media and the app's private `.env`. The image uses Python 3.10,
-PyTorch 2.0.1 / CUDA 11.8 and MMCV 2.0.1, matching upstream's MMLab dependencies.
-The NVIDIA Ubuntu base avoids replacing a newer Runpod PyTorch installation.
+The long validation used 1495 frames at 25 fps, took 128007 ms of execution after
+29927 ms of queue/startup, and reported peak GPU memory of 7064.7 MiB on an RTX
+A5000. All 11 media checks passed, including full decode, duration/frame count,
+non-silent preserved audio, changing frames and MP4 fast-start. The final app
+suite passed 19 tests; two CPU worker checks, TypeScript and the production build
+also passed. Integration tests use mocked provider responses; the three saved
+video runs are actual GPU jobs.
 
-```bash
-docker build --platform linux/amd64 -t YOUR_REGISTRY/avatar-studio-musetalk:v1 ops/musetalk
-docker push YOUR_REGISTRY/avatar-studio-musetalk:v1
-```
+Sampled frames show mouth animation and preserved framing. Mouth/beard details
+can be softer than the reference. No perceptual lip-sync benchmark or human
+listening assessment was performed. The long speech was repeated test audio,
+so that job establishes supported duration and resource use, not varied-content
+quality. See `production-readiness.json` for the complete local assessment.
 
-Use a registry you control and deploy the pushed digest, not a floating `latest`.
-Alternatively, connect this repository in Runpod's Serverless GitHub builder,
-select branch `deploy/musetalk-first-video`, Dockerfile `Dockerfile.musetalk`,
-and repository-root context. Name the Queue endpoint `avatar-studio-musetalk`.
-Use the worker settings below and choose the RTX A5000 or compatible Ampere/Ada
-GPU explicitly, excluding Blackwell. Building from source does not establish
-GPU compatibility.
+## Endpoint and billing
 
-Models are baked so worker replacement does not repeat model downloads during a
-paid job. Code is pinned to `0a89dec45a0192b824e3cf4daf96c239440c5ed8`.
-`download_models.py` records pinned Hugging Face revisions for MuseTalk V1.5,
-SD-VAE, Whisper tiny and DWPose. Face parsing, ResNet18 and S3FD come from the
-upstream download locations; their actual SHA-256 hashes are recorded at
-`/opt/MuseTalk/models/build-manifest.json` in the image. Their upstream URLs are
-not immutable. SyncNet and the V1.0 model are not needed for inference.
+Endpoint `gznh9jnnfgbzhu` is a queue endpoint on one RTX A5000 (24 GB). The catalog
+serverless rate read during validation was $0.75/hour. Settings: minimum 0,
+maximum 1 worker, five-second idle timeout, 600000 ms execution timeout, 50 GB
+container disk, no persistent GPU volume. `mcp-create-endpoint.json` records a
+reproducible configuration. Every change must be read back after updating.
 
-The baked models use several GB; final image size and build time must be measured
-by the builder. No Model Store or paid persistent volume is needed for this fixed,
-multi-repository model set. Runtime model loading is offline. Do not mount over
-`/opt/MuseTalk` or `/opt/worker`.
+`RUNPOD_BILLING_GUARD_ENABLED=true` reads provider account billing every five
+minutes and pauses new generation when a read becomes older than ten minutes.
+Admission includes reported charges and retained app reservations, which can count
+usage conservatively twice. Provider billing can arrive late and other account
+workloads can spend independently. App job costs are execution allocations, not
+the final provider invoice; startup, idle, storage and fees are separate.
+The local cost report is `data/musetalk-test-costs.json`.
 
-## Runpod settings
+## Build and deploy
 
-Suggested first validation configuration; hardware fit and throughput need a real test:
+GitHub Actions builds Linux amd64 from root `Dockerfile.musetalk` and its allowlist
+`Dockerfile.musetalk.dockerignore`. It publishes a commit tag and image digest to
+GHCR, with provenance and SBOM. Deploy a verified digest and preserve the minimum
+0 / maximum 1 worker setting. The standalone `ops/musetalk/Dockerfile` uses this
+folder as its context. `musetalk-runpod-source.zip` contains a standalone source
+bundle; neither build context includes `.env`, login files or user media.
 
-| Setting | Value |
-| --- | --- |
-| Endpoint type | Queue-based Serverless |
-| Image | The successfully built Linux amd64 image digest |
-| GPU | One 24 GB Ampere/Ada GPU, excluding Blackwell for this CUDA 11.8 stack |
-| Host memory | At least 32 GB suggested for long source clips |
-| CUDA host floor | 12.8 (newer host driver runs the CUDA 11.8 image) |
-| Minimum / maximum workers | 0 / 1 |
-| Handler concurrency | 1 |
-| Idle timeout | 5 seconds initially |
-| Execution timeout | 600000 ms; align with the app's job setting |
-| Container disk | 30 GB suggested; check measured image and scratch needs |
-| Network volume / public ports | None |
-| Worker environment | `STUDIO_BASE_URL=https://office.creativeprocess.io/videolab` |
+The NVIDIA base, MuseTalk revision, primary Python dependencies and Hugging Face
+model revisions are pinned. The built image records installed requirements and
+model hashes. Do not mount over `/opt/MuseTalk` or `/opt/worker`. The old
+`install-runtime.sh`/`start-runtime.sh` files describe the initial compatibility
+deployment and are not the production startup command.
 
-The worker only downloads cached media from that HTTPS origin, refuses redirects,
-and sends its output to that origin's job-specific upload URL. The app proxy must
-allow `PUT /videolab/api/veo/output/:id`, preserve `Authorization` and allow 50 MB
-bodies, with an upload timeout of at least 120 seconds. Photo/video uploads to the
-app require a 30 MB JSON limit. Verify these through the public proxy before a
-paid render. Worker start/health alone does not validate either media access or CUDA.
-
-After creating and reading back the endpoint, configure the app server:
-
-```dotenv
-RUNPOD_MUSETALK_ENDPOINT=THE_NEW_ENDPOINT_ID
-MUSETALK_GENERATION_ENABLED=false
-MUSETALK_MAX_JOB_SECONDS=600
-MUSETALK_HOURLY_USD=THE_ACTUAL_FLEX_WORKER_RATE
-```
-
-The hourly value must come from a fresh Runpod rate read. The `.env.example` rate
-is a placeholder for reservations, not a quote. At runtime the app reserves
-`rate * 600 / 3600` and reconciles terminal jobs using Runpod's `executionTime`.
-Missing runtime data and user cancellation retain the reservation. This app ledger
-does not include all startup/idle/storage charges; use Runpod billing for the total.
-No monthly render cost or quality claim is established until a representative test.
-
-An optional private `MUSETALK_CALLBACK_SECRET` signs output uploads; otherwise the
-app uses its Runpod API key. Neither secret is sent to the worker or browser. The
-worker gets a derived token authorizing only its own job. Keep the signing secret
-stable across app restarts and do not rotate it while a render is active.
-
-## Validate one real render
-
-Start the app and prepare a request using a sharp photo or a short source video,
-and a real WAV/MP3 voice recording. Preparation does not call the GPU:
-
-```bash
-node --import tsx ops/musetalk/smoke-test.ts --prepare \
-  --source /absolute/path/avatar.mp4 --audio /absolute/path/speech.wav \
-  --script 'The words actually spoken in this recording.'
-```
-
-Use `--aspect 9:16` for portrait delivery. Review
-`data/musetalk-validation/review.json`. Once the paid validation is authorized,
-enable `MUSETALK_GENERATION_ENABLED=true` in the server environment, restart the
-app, and submit exactly once:
-
-```bash
-APPROVE_PAID_GENERATION=yes node --import tsx ops/musetalk/smoke-test.ts --submit
-```
-
-The script stores its app job ID before polling. Resume an interrupted test with:
-
-```bash
-node --import tsx ops/musetalk/smoke-test.ts --status
-```
-
-If submission has an unknown outcome it refuses another submission. Review the
-app ledger and Runpod jobs to recover the existing ID. Do not remove state to retry.
-Review `output.mp4` for face identity, mouth artifacts, speech timing, original
-voice and movement; record GPU, image digest, peak memory, queue/startup/execution
-times, provider job ID and observed Runpod charges. Then test repeat speech on the
-same source, a failed input followed by a valid one, cancellation and a cold worker
-replacement before enabling general use. For a fresh validation source, use a new
-`--directory data/musetalk-validation-2` instead of overwriting a submitted request.
-
-## Local verification and recovery
+## Reproduce verification
 
 ```bash
 npm run lint
-node --import tsx --test server/*.test.ts src/utils/*.test.ts
+node --import tsx --test --test-concurrency=1 server/*.test.ts src/utils/*.test.ts
 python3 -B -m unittest discover -s ops/musetalk -p 'test_*.py' -v
 npm run build
 ```
 
-Node tests use real CPU-generated media and mocked Runpod responses to verify
-video upload/normalization, simultaneous-request deduplication, authenticated
-output delivery, original voice export, restart recovery, failed-job retry,
-cancellation and uncertain-submission quarantine. Python tests check the worker's
-URL contract, real audio conversion and adapter cleanup with fake transport and
-inference. These are not GPU/model tests.
+Prepare a new paid validation in a new directory, then submit once. A photo gets
+mouth animation; an avatar video retains existing movement, repeated forwards and
+backwards if necessary. New body gestures are not generated.
 
-Models load once per warm process. One source's prepared frames, face masks and
-CPU latents are cached in memory, then evicted on a source change. Replacement
-workers rebuild this cache; no persistent user-face cache or file deserialization
-is used. Per-job scratch is removed on success and failure. Completed provider
-uploads live on the app disk across worker replacement and are deleted after
-export. Failed/cancelled jobs discard received intermediates. Unknown submissions
-retain both their reservation and any upload for operator reconciliation. A worker
-error is reported as failure; the worker never retries inference or submissions.
+```bash
+node --import tsx ops/musetalk/smoke-test.ts --prepare \
+  --source /absolute/path/avatar.mp4 --audio /absolute/path/speech.wav \
+  --script 'The words in the recording.' --aspect 9:16 \
+  --directory data/new-validation --login-file data/private/studio-login.txt
+APPROVE_PAID_GENERATION=yes node --import tsx ops/musetalk/smoke-test.ts --submit \
+  --directory data/new-validation --login-file data/private/studio-login.txt
+```
 
-Sources: [MuseTalk](https://github.com/TMElyralab/MuseTalk),
-[Runpod custom workers](https://docs.runpod.io/serverless/workers/handler-functions),
-[queue operations](https://docs.runpod.io/serverless/endpoints/operation-reference),
-[GitHub builds](https://docs.runpod.io/serverless/workers/github-integration).
+Resume an interrupted validation with `--status` on that same directory. Never
+remove submission state to retry an uncertain request. The app quarantines
+ambiguous video and speech submissions, including across restarts.
+
+```bash
+python3 -B ops/musetalk/verify-output.py \
+  --directory data/musetalk-release-validation \
+  --audio data/musetalk-release-validation/stress-speech.wav --aspect 9:16
+```
+
+Media checks do not measure perceptual lip-sync. Failed or cancelled jobs retain
+cost reservations for review. Use the encrypted backup procedure before moving
+application data, and retain a secure off-host copy of the archive and key.
